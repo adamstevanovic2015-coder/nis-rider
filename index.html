@@ -102,6 +102,7 @@ canvas#c{position:absolute;inset:0;display:block}
     <input id="nick" maxlength="14" autocomplete="off" placeholder="npr. Munja07">
     <div class="row"><button class="big on" id="vB">🚲 Bicikl<br><small>brži</small></button><button class="big" id="vS">🛴 Trotinet<br><small>okretniji, bolji trikovi</small></button><button class="big" id="vP">🚓 Policajka<br><small>drift + sirena</small></button></div>
     <button class="big go" id="goBtn">KRENI! 🚀</button>
+    <button class="big" id="gOut" style="margin-top:8px;font-size:13px">Odjavi se</button>
     <p style="font-size:12px;color:#607d8b">Levo: prevlači prst za vožnju · Desno: SKOK / TRIK (u vazduhu), TURBO, 🎆 vatromet. Tastatura: strelice/WASD, Space, Shift, F.</p>
   </div>
 </div>
@@ -114,9 +115,41 @@ canvas#c{position:absolute;inset:0;display:block}
   <button class="big go" id="shopX2">Zatvori prodavnicu ✓</button>
 </div></div>
 <div id="home" class="ov"><div class="card"><h2 id="homeT"></h2><p id="homeP"></p><button class="big go" id="hRest">🛏 Odmori se (puni TURBO)</button><div class="row"><button class="big" id="hDep">💰 U sef +100</button><button class="big" id="hWd">Izvadi sve</button></div><p style="font-size:12px;color:#607d8b">Novac u sefu je bezbedan od kazni.</p><button class="big go" id="hOut" style="background:#546e7a">Izađi napolje</button></div></div>
+<div id="login" class="ov" style="display:none;z-index:300"><div class="card"><h2>🚲 Niš Rider</h2><p>Prijavi se Google nalogom da te igra pamti i da igraš sa drugima.</p><button class="big go" id="gLogin">Prijavi se Google nalogom</button><p id="lgMsg" style="font-size:12px;color:#607d8b"></p></div></div>
 <div id="lb" class="ov"><div class="card"><button class="close" id="lbX">✕</button><h2>🏆 Igrači uživo</h2><div id="lbList"></div><p id="lbNote" style="font-size:12px;color:#607d8b"></p><button class="big go" id="lbX2">Zatvori ✓</button></div></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script>
+window.fbRoom=new Promise(r=>{window.__fbR=r;});
+(function(){
+const $=id=>document.getElementById(id);
+const cfg={apiKey:"AIzaSyCh_zaBCazK2JUYCoP4ereb1DNaWcDqDac",authDomain:"nis-rider.firebaseapp.com",databaseURL:"https://nis-rider-default-rtdb.europe-west1.firebasedatabase.app",projectId:"nis-rider",storageBucket:"nis-rider.firebasestorage.app",messagingSenderId:"160489747821",appId:"1:160489747821:web:fcfa28505b11b4c8641664"};
+if(!window.firebase){$('login').style.display='flex';$('lgMsg').textContent='Firebase se nije učitao. Osveži stranicu.';return;}
+firebase.initializeApp(cfg);
+const auth=firebase.auth(),db=firebase.database();
+let uid=null,lastW=0,off=0,pRef=null,sT=0;const peersM=new Map();
+db.ref('.info/serverTimeOffset').on('value',x=>{off=x.val()||0;});
+const room={presence(o){const t=Date.now();if(!uid||t-lastW<230)return Promise.resolve();lastW=t;o.ts=firebase.database.ServerValue.TIMESTAMP;return pRef.set(o);},
+ peers(){const t=Date.now()+off,out=[];peersM.forEach((v,k)=>{if(k!==uid&&t-(v.ts||0)<20000)out.push({peer:k,isMe:false,kind:'viewer',presence:v});});return out;}};
+window.cloudSave=function(){if(!uid)return;clearTimeout(sT);sT=setTimeout(()=>{try{db.ref('users/'+uid+'/save').set(JSON.stringify(window.__SAVE));}catch(e){}},2500);};
+$('gLogin').onclick=async()=>{const p=new firebase.auth.GoogleAuthProvider();$('lgMsg').textContent='';try{await auth.signInWithPopup(p);}catch(e){if(e.code==='auth/popup-blocked'||e.code==='auth/operation-not-supported-in-this-environment')auth.signInWithRedirect(p);else $('lgMsg').textContent='Prijava nije uspela: '+(e.code||e.message);}};
+$('gOut').onclick=()=>{auth.signOut().then(()=>location.reload());};
+auth.onAuthStateChanged(async u=>{
+ if(!u){$('login').style.display='flex';return;}
+ uid=u.uid;const S=window.__SAVE;
+ try{const sn=await db.ref('users/'+uid+'/save').get(),c=sn.val();if(c){const cs=JSON.parse(c);if((cs.total||0)>=(S.total||0)||!S.nick)Object.assign(S,cs);}}catch(e){}
+ if(!S.nick)S.nick=(u.displayName||'').split(' ')[0].replace(/[^\p{L}\p{N}_\-. ]/gu,'').slice(0,14);
+ if(S.nick)$('nick').value=S.nick;
+ $(S.veh==='scooter'?'vS':S.veh==='police'?'vP':'vB').click();
+ pRef=db.ref('presence/'+uid);pRef.onDisconnect().remove();
+ const P=db.ref('presence');P.on('child_added',a=>peersM.set(a.key,a.val()));P.on('child_changed',a=>peersM.set(a.key,a.val()));P.on('child_removed',a=>peersM.delete(a.key));
+ $('login').style.display='none';window.cloudSave();window.__fbR(room);});
+})();
+</script>
+
 <script>
 'use strict';
 (()=>{
@@ -143,7 +176,7 @@ class Hash{constructor(cs){this.cs=cs;this.m=new Map();this.st=0;}
 const KEY='nisrider.v1';
 const SAVE={nick:'',wallet:0,total:0,inv:{},owned:{red:true},color:'red',disc:{},sel:'petarda',veh:'bike',house:null,vault:0};
 try{const j=localStorage.getItem(KEY);if(j)Object.assign(SAVE,JSON.parse(j));}catch(e){}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(SAVE));}catch(e){}}
+window.__SAVE=SAVE;function save(){try{localStorage.setItem(KEY,JSON.stringify(SAVE));}catch(e){}window.cloudSave&&window.cloudSave();}
 
 // ---------- audio
 let AC=null,muted=false,NB=null;
@@ -581,7 +614,7 @@ function fireItem(){const it=ITEMS.find(i=>i.id===SAVE.sel&&i.t==='fw');if(!it||
 
 // ---------- multiplayer (presence)
 let room=null;const ghosts=new Map();let peerCount=0;
-(async()=>{try{if(window.claude&&claude.use)room=await claude.use('room');}catch(e){room=null;}})();
+(async()=>{try{if(window.fbRoom)room=await window.fbRoom;else if(window.claude&&claude.use)room=await claude.use('room');}catch(e){room=null;}})();
 setInterval(()=>{if(!room||!G.started)return;try{room.presence({n:SAVE.nick,s:G.scene==='park'?'p':'c',x:Math.round(me.x),y:Math.round(me.y),h:Math.round(me.h*100)/100,z:Math.round(me.z),v:me.veh==='police'?'p':me.veh==='scooter'?'s':me.veh==='mtb'?'m':'b',c:SAVE.color,sc:SAVE.total,fc:me.fxc,ft:me.fxt,fx:Math.round(me.fxx),fy:Math.round(me.fxy)}).catch(()=>{});}catch(e){}},120);
 const num=(v,d)=>typeof v==='number'&&isFinite(v)?v:d;
 function readPeers(dt){let list=[];try{list=room?room.peers():[];}catch(e){}const seen=new Set();let cnt=0;
